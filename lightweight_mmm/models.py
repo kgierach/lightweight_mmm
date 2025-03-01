@@ -123,7 +123,8 @@ def _get_default_priors() -> Mapping[str, Prior]:
       _COEF_SEASONALITY: dist.HalfNormal(scale=.5),
       _CHAN_INTERACT: dist.Normal(loc=0., scale=1.),
       _CHAN_INTERACT_ENABLE: dist.Uniform(low=0.0, high=0.49),
-      _COEF_BRAND: dist.Normal(loc=0., scale=1.),
+      # _COEF_BRAND: dist.Normal(loc=0., scale=1.),
+      _COEF_BRAND: dist.HalfNormal(scale=2.),
       _BRAND_AD_EFFECT_RETENTION_RATE: dist.Beta(concentration1=10., concentration0=1.),
       _BRAND_PEAK_EFFECT_DELAY: dist.HalfNormal(scale=15.),
   })
@@ -535,7 +536,6 @@ def media_mix_model(
 
   # transform data with interactions
   if media_interactions is not None:
-      print( 'kdbg: media_interactions: ', media_interactions )
 
       with numpyro.plate(name=f"media_interactions_plate", size=n_channels):
           coef_enable = numpyro.sample( name=_CHAN_INTERACT_ENABLE,
@@ -552,10 +552,10 @@ def media_mix_model(
               mc = media_data[ :, cIdx ]
               mc = jnp.reshape( mc, (data_size,1) )
 
-              print( 'coeff enabled for idx: ', cIdx, " shp: ", jnp.shape(mc) )
+              # print( 'coeff enabled: ', coef_enable[cIdx], ' idx: ', cIdx, " shp: ", jnp.shape(mc) )
               new_mc = ((1.0 - coef_enable[cIdx]) * mc)  + \
                        coef_enable[cIdx] * jnp.add( (1.0 - media_interactions) * mc, media_interactions * jnp.maximum( 0, mc + (mc * coef_interact[cIdx]) ) )
-              print( 'new_mc shp: ', jnp.shape(new_mc) )
+              # print( 'new_mc shp: ', jnp.shape(new_mc) )
 
               if new_media_data is None:
                   new_media_data = jnp.reshape( new_mc, (data_size,1) )
@@ -575,9 +575,13 @@ def media_mix_model(
       coef_brand = numpyro.sample( name=_COEF_BRAND,
                                    fn=custom_priors.get( _COEF_BRAND, default_priors[_COEF_BRAND] ) )
       brand_xform = brand_carryover( brand, custom_priors )
+      # print( "INFO: brand xform: shape: ", jnp.shape(brand_xform), " data -> ", brand_xform )
+      brand_xform = jnp.nan_to_num( brand_xform, posinf=9999999, neginf=-9999999)
+      # numpyro.deterministic( name="brand_transformed", value=brand_xform )
       brand_einsum = "tc, c -> t"  # t = time, c = channel
       brand_contribution = jnp.einsum( brand_einsum, brand_xform, coef_brand )
-      print( 'INFO: brand contrib: shp=', jnp.shape(brand_contribution) )
+      # print( 'INFO: brand contrib: shp=', jnp.shape(brand_contribution), " coef_brand shp=", jnp.shape(coef_brand) )
+      # print( "INFO: brand contribution: ", brand_contribution )
   else:
       print( 'INFO: NO BRANDS specified, brand contrib: shp=', jnp.shape(brand_contribution), "|", n_brand )
   # end brand
@@ -640,6 +644,6 @@ def media_mix_model(
     prediction += weekday_series
   mu = numpyro.deterministic(name="mu", value=prediction)
 
-  #print( "mu:(loc): ", mu, ":", sigma, " obs=", target_data )
+  # print( "mu:(loc): ", mu, ":", sigma, " obs=", target_data )
   numpyro.sample(
       name="target", fn=dist.Normal(loc=mu, scale=sigma), obs=target_data)

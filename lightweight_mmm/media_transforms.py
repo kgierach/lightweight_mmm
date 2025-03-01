@@ -343,3 +343,13 @@ def apply_exponent_safe(
   """
   exponent_safe = jnp.where(data == 0, 1, data) ** exponent
   return jnp.where(data == 0, 0, exponent_safe)
+
+
+# same as carryover, only difference being the
+# default number of lags is longer for brand advertising
+@functools.partial(jax.jit, static_argnames=("number_lags",))
+def brand_carryover(data: jnp.ndarray,
+              ad_effect_retention_rate: jnp.ndarray,
+              peak_effect_delay: jnp.ndarray,
+              number_lags: int = 26) -> jnp.ndarray:
+    return carryover( data, ad_effect_retention_rate, peak_effect_delay, number_lags )
