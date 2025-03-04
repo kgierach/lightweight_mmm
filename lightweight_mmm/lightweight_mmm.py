@@ -263,6 +263,7 @@ class LightweightMMM:
       media_prior: jnp.ndarray,
       target: jnp.ndarray,
       extra_features: Optional[jnp.ndarray] = None,
+      media_interactions: Optional[jnp.ndarray] = None,
       degrees_seasonality: int = 2,
       seasonality_frequency: int = 52,
       weekday_seasonality: bool = False,
@@ -359,6 +360,9 @@ class LightweightMMM:
     if extra_features is not None:
       extra_features = jnp.array(extra_features)
 
+    if media_interactions is not None:
+        media_interactions = jnp.array(media_interactions)
+
     if seed is None:
       seed = utils.get_time_seed()
 
@@ -379,6 +383,7 @@ class LightweightMMM:
         rng_key=jax.random.PRNGKey(seed),
         media_data=jnp.array(media),
         extra_features=extra_features,
+        media_interactions=media_interactions,
         target_data=jnp.array(target),
         media_prior=media_prior,                     # removed jnp.array
         degrees_seasonality=degrees_seasonality,
@@ -408,7 +413,7 @@ class LightweightMMM:
     self._seasonality_frequency = seasonality_frequency
     self._weekday_seasonality = weekday_seasonality
     self.media = media
-    self._extra_features = extra_features# jax-devicearray
+    self._extra_features = extra_features # jax-devicearray
     self._mcmc = mcmc
     self.channel_opts = channel_opts
     self._baseline_data = baseline_data
