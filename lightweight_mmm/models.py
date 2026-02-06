@@ -571,9 +571,9 @@ def media_mix_model(
   # begin brand
   brand_contribution = jnp.zeros( data_size )
   if (brand is not None) and len(brand) > 0:
-    with numpyro.plate(name=f"media_interactions_plate", size=n_brand):
-      coef_brand = numpyro.sample( name=_COEF_BRAND,
-                                   fn=custom_priors.get( _COEF_BRAND, default_priors[_COEF_BRAND] ) )
+      with numpyro.plate(name=f"brand_plate", size=n_brand):
+          coef_brand = numpyro.sample( name=_COEF_BRAND,
+                                       fn=custom_priors.get( _COEF_BRAND, default_priors[_COEF_BRAND] ) )
       brand_xform = brand_carryover( brand, custom_priors )
       # print( "INFO: brand xform: shape: ", jnp.shape(brand_xform), " data -> ", brand_xform )
       brand_xform = jnp.nan_to_num( brand_xform, posinf=9999999, neginf=-9999999)
