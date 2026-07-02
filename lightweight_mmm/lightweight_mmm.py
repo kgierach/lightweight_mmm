@@ -261,6 +261,7 @@ class LightweightMMM:
       media_prior: jnp.ndarray,
       target: jnp.ndarray,
       extra_features: Optional[jnp.ndarray] = None,
+      promo_features: Optional[jnp.ndarray] = None,
       media_interactions: Optional[jnp.ndarray] = None,
       brand: Optional[jnp.ndarray] = None,
       degrees_seasonality: int = 2,
@@ -358,6 +359,9 @@ class LightweightMMM:
     if extra_features is not None:
       extra_features = jnp.array(extra_features)
 
+    if promo_features is not None:
+      promo_features = jnp.array(promo_features)
+
     if media_interactions is not None:
         media_interactions = jnp.array(media_interactions)
 
@@ -381,6 +385,7 @@ class LightweightMMM:
         rng_key=jax.random.PRNGKey(seed),
         media_data=jnp.array(media),
         extra_features=extra_features,
+        promo_features=promo_features,
         media_interactions=media_interactions,
         brand=brand,
         target_data=jnp.array(target),

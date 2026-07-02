@@ -22,6 +22,7 @@ three different models.
   - Carryover
 """
 import sys
+import math
 #  pylint: disable=g-import-not-at-top
 if sys.version_info >= (3, 8):
   from typing import Protocol
@@ -62,6 +63,7 @@ _SIGMA = "sigma"
 _GAMMA_SEASONALITY = "gamma_seasonality"
 _WEEKDAY = "weekday"
 _COEF_EXTRA_FEATURES = "coef_extra_features"
+_COEF_PROMO_FEATURES = "coef_promo_features"
 _COEF_SEASONALITY = "coef_seasonality"
 _CHAN_INTERACT_ENABLE = "int_enabler"
 _CHAN_INTERACT = "channel_interaction"
@@ -78,6 +80,7 @@ MODEL_PRIORS_NAMES = frozenset((
     _GAMMA_SEASONALITY,
     _WEEKDAY,
     _COEF_EXTRA_FEATURES,
+    _COEF_PROMO_FEATURES,
     _COEF_SEASONALITY,
     _CHAN_INTERACT_ENABLE,
     _CHAN_INTERACT,
@@ -120,6 +123,7 @@ def _get_default_priors() -> Mapping[str, Prior]:
       _GAMMA_SEASONALITY: dist.Normal(loc=0., scale=1.),
       _WEEKDAY: dist.Normal(loc=0., scale=.5),
       _COEF_EXTRA_FEATURES: dist.Normal(loc=0., scale=1.),
+      _COEF_PROMO_FEATURES: dist.LogNormal( loc=0.1, scale=0.75 ),
       _COEF_SEASONALITY: dist.HalfNormal(scale=.5),
       _CHAN_INTERACT: dist.Normal(loc=0., scale=1.),
       _CHAN_INTERACT_ENABLE: dist.Uniform(low=0.0, high=0.49),
@@ -421,6 +425,29 @@ def transform_hill_radstock(media_data: jnp.ndarray,
         slope=slope)
 
 
+#
+def _add_linear_feature( features, custom_priors, default_priors,
+                         GROUP_NAME=_COEF_EXTRA_FEATURES, feature_pfx="extra_feature" ):
+    plate_prefixes = (feature_pfx,)
+    extra_features_einsum = "tf, f -> t"  # t = time, f = feature
+    extra_features_plates_shape = (extra_features.shape[1],)
+    if features.ndim == 3:
+        plate_prefixes = (feature_pfx, "geo")
+        extra_features_einsum = "tfg, fg -> tg"  # t = time, f = feature, g = geo
+        extra_features_plates_shape = (features.shape[1], *geo_shape)
+    with numpyro.plate_stack(plate_prefixes,
+                             sizes=extra_features_plates_shape):
+        coef_extra_features = numpyro.sample(
+            name=GROUP_NAME,
+            fn=custom_priors.get(
+                GROUP_NAME, default_priors[GROUP_NAME]))
+    features_effect = jnp.einsum( extra_features_einsum,
+                                  features,
+                                  coef_extra_features )
+
+    return features_effect
+
+
 def media_mix_model(
     media_data: jnp.ndarray,
     target_data: jnp.ndarray,
@@ -432,6 +459,7 @@ def media_mix_model(
     transform_kwargs: Optional[MutableMapping[str, Any]] = None,
     weekday_seasonality: bool = False,
     extra_features: Optional[jnp.ndarray] = None,
+    promo_features: Optional[jnp.ndarray] = None,
     media_interactions: Optional[jnp.ndarray] = None,
     brand: Optional[jnp.ndarray] = None,
     channel_opts: Optional[Dict[str, Any]] = None
@@ -622,23 +650,12 @@ def media_mix_model(
       jnp.einsum(media_einsum, media_transformed, coef_media) )
 
   if extra_features is not None:
-    plate_prefixes = ("extra_feature",)
-    extra_features_einsum = "tf, f -> t"  # t = time, f = feature
-    extra_features_plates_shape = (extra_features.shape[1],)
-    if extra_features.ndim == 3:
-      plate_prefixes = ("extra_feature", "geo")
-      extra_features_einsum = "tfg, fg -> tg"  # t = time, f = feature, g = geo
-      extra_features_plates_shape = (extra_features.shape[1], *geo_shape)
-    with numpyro.plate_stack(plate_prefixes,
-                             sizes=extra_features_plates_shape):
-      coef_extra_features = numpyro.sample(
-          name=_COEF_EXTRA_FEATURES,
-          fn=custom_priors.get(
-              _COEF_EXTRA_FEATURES, default_priors[_COEF_EXTRA_FEATURES]))
-    extra_features_effect = jnp.einsum(extra_features_einsum,
-                                       extra_features,
-                                       coef_extra_features)
-    prediction += extra_features_effect
+    prediction += _add_linear_feature( extra_features, custom_priors, default_priors,
+                                       _COEF_EXTRA_FEATURES, "extra_feature" )
+
+  if promo_features is not None:
+    prediction += _add_linear_feature( promo_features, custom_priors, default_priors,
+                                       _COEF_PROMO_FEATURES, "promo_feature" )
 
   if weekday_seasonality:
     prediction += weekday_series
